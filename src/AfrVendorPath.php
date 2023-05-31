@@ -19,6 +19,7 @@ use function str_repeat;
 use function filemtime;
 
 /**
+ * Copyright BSD-3-Clause / Nistor Alexadru Marius / Auroframe SRL Romania / https://github.com/autoframe
  * Requires composer package: composer/class-map-generator
  * This will detect the real vendor path:
  * /shared/app/afr/vendor

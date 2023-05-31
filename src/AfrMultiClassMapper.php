@@ -10,6 +10,7 @@ use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 
 
 /**
+ * Copyright BSD-3-Clause / Nistor Alexadru Marius / Auroframe SRL Romania / https://github.com/autoframe
  * Magic :)
  */
 class AfrMultiClassMapper

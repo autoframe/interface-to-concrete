@@ -2,7 +2,7 @@
     "type": "library",
     "name": "autoframe/interface-to-concrete",
     "description": "PHP Interface to concrete class mapper Autoframe Framework",
-    "license": "BSD 3-Clause License",
+    "license": "BSD-3-Clause",
     "homepage": "https://github.com/autoframe",
     "require": {
         "php": "^7.4 || ^8.0",

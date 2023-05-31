@@ -7,6 +7,7 @@ namespace Autoframe\InterfaceToConcrete;
 use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 
 /**
+ * Copyright BSD-3-Clause / Nistor Alexadru Marius / Auroframe SRL Romania / https://github.com/autoframe
  * This will make a configuration object that contains the paths to be wired:
  *
  * $oAfrConfigWiredPaths = new AfrConfigWiredPaths(['src','vendor']);
