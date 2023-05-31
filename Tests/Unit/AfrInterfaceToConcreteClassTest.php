@@ -32,6 +32,10 @@ class AfrInterfaceToConcreteClassTest extends TestCase
                                       bool  $bForceRegenerateAllButVendor
     ): void
     {
+        AfrClassDependency::clearDebugFatalError();
+        AfrClassDependency::clearDependencyInfo();
+        AfrClassDependency::setSkipClassInfo([]);
+        AfrClassDependency::setSkipNamespaceInfo([]);
         if(in_array(__DIR__,$aExtraPaths)){
             AfrClassDependency::setSkipNamespaceInfo([''], true); //skip some global classes
         }
@@ -70,6 +74,10 @@ class AfrInterfaceToConcreteClassTest extends TestCase
 
         }
         $this->assertEquals(true, $obj instanceof AfrInterfaceToConcreteClass,'!$obj instanceof AfrInterfaceToConcreteClass');
+        AfrClassDependency::clearDebugFatalError();
+        AfrClassDependency::clearDependencyInfo();
+        AfrClassDependency::setSkipClassInfo([]);
+        AfrClassDependency::setSkipNamespaceInfo([]);
     }
 
 
