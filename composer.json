@@ -1,0 +1,44 @@
+{
+    "type": "library",
+    "name": "autoframe/interface-to-concrete",
+    "description": "PHP Interface to concrete class mapper Autoframe Framework",
+    "license": "BSD 3-Clause License",
+    "homepage": "https://github.com/autoframe",
+    "require": {
+        "php": "^7.4 || ^8.0",
+        "autoframe/components-exception": "^1.0",
+        "composer/class-map-generator": "^1.0",
+        "autoframe/class-dependency": "^1.0",
+        "autoframe/components-filesystem": "^1.0",
+        "autoframe/components-arr": "^1.0",
+        "ext-json": "*"
+    },
+    "version": "1.0.1",
+    "authors": [
+        {
+            "name": "Nistor Alexandru Marius",
+            "homepage": "https://autoframe.ro",
+            "role": "Developer"
+        }
+    ],
+    "keywords": [
+        "interface",
+        "concrete",
+        "autowire",
+        "auto",
+        "wire",
+        "composer",
+        "map",
+        "mapper",
+        "path",
+        "autoframe"
+    ],
+    "autoload": {
+        "psr-4": {
+            "Autoframe\\InterfaceToConcrete\\": "src/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "9.5"
+    }
+}
