@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace Autoframe\InterfaceToConcrete;
 
+use Autoframe\Components\Exception\AfrException;
 use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
+use Autoframe\ClassDependency\AfrClassDependency;
 
 use function array_merge;
 use function realpath;
@@ -41,6 +43,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
      * @param int $iAutoWireCacheExpireSeconds
      * @param bool $bForceRegenerateAllButVendor
      * @throws AfrInterfaceToConcreteException
+     * @throws AfrException
      */
     public function __construct(
         array $aExtraPaths = [],
@@ -64,7 +67,11 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
                 $this->aPaths[$sPath] = $sPrefix . $this->hashV($sPath);
             }
         }
-        $this->sHash = 'C_' . $this->hashV(serialize($this->aPaths));
+        $this->sHash = 'C_' . $this->hashV(serialize(array_merge(
+                $this->aPaths,
+                AfrClassDependency::setSkipClassInfo([], true),
+                AfrClassDependency::setSkipNamespaceInfo([], true)
+            )));
 
     }
 
