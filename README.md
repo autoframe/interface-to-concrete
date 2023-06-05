@@ -12,9 +12,9 @@ Namespace:
 
 Classes:
 - class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
-  - configurer and caller for  AfrMultiClassMapper
+  - configurator and caller for AfrMultiClassMapper
 - class AfrMultiClassMapper
   - magic
 - class AfrVendorPath 
-  - will detect the vendor dir and reas the psr4, psr0 and class-maps
+  - will detect the vendor dir and read the psr4, psr0 and class-maps
 

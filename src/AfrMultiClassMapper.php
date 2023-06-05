@@ -282,9 +282,9 @@ class AfrMultiClassMapper
      */
     protected static function overWrite(string $sPathTo, array $aData, int $iRetryMs = 3000, float $fDelta = 2): bool
     {
-        return (new AfrOverWriteClass())->overWriteFile(
+        return AfrOverWriteClass::getInstance()->overWriteFile(
             $sPathTo,
-            '<?php return ' . (new AfrArrExportArrayAsStringClass())->exportPhpArrayAsString($aData),
+            '<?php return ' . AfrArrExportArrayAsStringClass::getInstance()->exportPhpArrayAsString($aData),
             $iRetryMs,
             $fDelta
         );

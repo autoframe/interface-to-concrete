@@ -6,5 +6,8 @@
         <testsuite name="Autoframe Interface to Concrete Class tests">
             <directory>./Tests/Unit</directory>
         </testsuite>
+        <testsuite name="Package Dependencies Autoframe/*">
+            <directory>*/autoframe/*/Tests/Unit</directory>
+        </testsuite>
     </testsuites>
 </phpunit>
