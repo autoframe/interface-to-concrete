@@ -100,11 +100,7 @@ class AfrVendorPath
             return 0;
         }
         $sFile = self::getVendorPath() . self::$sInstalledJson;
-        $sFile2 = self::getBaseDirPath() . DIRECTORY_SEPARATOR . 'composer.json';
-        return max(
-            is_file($sFile) ? (int)filemtime($sFile) : 0,
-            is_file($sFile2) ? (int)filemtime($sFile2) : 0
-        );
+        return is_file($sFile) ? (int)filemtime($sFile) : 0;
     }
 
     /**
@@ -266,7 +262,7 @@ class AfrVendorPath
     /** Detects a valid vendor path in the file system
      * @return string
      */
-    private static function detectVendorPath(): string
+    protected static function detectVendorPath(): string
     {
         $sDs = DIRECTORY_SEPARATOR;
         $sDsUp = '..' . $sDs;
@@ -303,7 +299,7 @@ class AfrVendorPath
      * @param string $sPath
      * @return string
      */
-    private static function checkForComposerVendorPath(string $sPath): string
+    protected static function checkForComposerVendorPath(string $sPath): string
     {
         $arRealPath = explode(self::$sVendor, (string)realpath($sPath));
         $iParts = count($arRealPath);
@@ -327,7 +323,7 @@ class AfrVendorPath
      * @return array
      * Fallback for vendor directory that is outside the app directory
      */
-    private static function getSplComposerClassMap(): array
+    protected static function getSplComposerClassMap(): array
     {
         $sClassLoader = 'Composer\\Autoload\\ClassLoader';
         if (!class_exists($sClassLoader)) {

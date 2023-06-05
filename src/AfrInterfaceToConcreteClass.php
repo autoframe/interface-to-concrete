@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Autoframe\InterfaceToConcrete;
 
+use Autoframe\ClassDependency\AfrClassDependencyException;
 use Autoframe\Components\Exception\AfrException;
 use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 use Autoframe\ClassDependency\AfrClassDependency;
@@ -34,28 +35,30 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
     protected int $iAutoWireCacheExpireSeconds;
 
     protected bool $bForceRegenerateAllButVendor;
+    protected bool $bSilenceErrors;
+    protected array $aClassInterfaceToConcrete;
 
-    public const VendorPrefix = '1Ve_'; //Vendor prefix
-    public const AutoloadPrefix = '2Al_'; //Auto-loaded composer
-    public const ExtraPrefix = '3Ex_'; //extra dirs
 
     /**
      * @param array $aExtraPaths
      * @param int $iAutoWireCacheExpireSeconds
      * @param bool $bForceRegenerateAllButVendor
-     * @throws AfrInterfaceToConcreteException
+     * @param bool $bSilenceErrors
      * @throws AfrException
+     * @throws AfrInterfaceToConcreteException
      */
     public function __construct(
         array $aExtraPaths = [],
         int   $iAutoWireCacheExpireSeconds = 3600 * 24 * 365 * 2,
-        bool  $bForceRegenerateAllButVendor = false
+        bool  $bForceRegenerateAllButVendor = false,
+        bool  $bSilenceErrors = false
     )
     {
         $this->iAutoWireCacheExpireSeconds = max(60, abs($iAutoWireCacheExpireSeconds));
         $this->bForceRegenerateAllButVendor = $bForceRegenerateAllButVendor;
+        $this->bSilenceErrors = $bSilenceErrors;
 
-        $aPaths = [self::VendorPrefix => [], self::AutoloadPrefix => [], self::ExtraPrefix => [],];
+        $aPaths = [AfrMultiClassMapper::VendorPrefix => [], AfrMultiClassMapper::AutoloadPrefix => [], AfrMultiClassMapper::ExtraPrefix => [],];
         $this->applyExtraPrefix($aExtraPaths, $aPaths);
         $this->applyVendorPrefix($aPaths);
         $this->applyAutoloadPrefix($aPaths);
@@ -79,18 +82,70 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
     /**
      * @return array
      * @throws AfrInterfaceToConcreteException
+     * @throws AfrClassDependencyException
      */
     public function getClassInterfaceToConcrete(): array
     {
-        AfrMultiClassMapper::setAfrConfigWiredPaths($this);
-        return AfrMultiClassMapper::getInterfaceToConcrete();
+        if(!isset($this->aClassInterfaceToConcrete)){
+
+            AfrClassDependency::setSkipClassInfo([
+                'ArrayAccess',
+                'BadFunctionCallException',
+                'BadMethodCallException',
+                'Countable',
+                'Exception',
+                'Iterator',
+                'IteratorAggregate',
+                'IteratorIterator',
+                'InvalidArgumentException',
+                'JsonSerializable',
+                'LogicException',
+                'OuterIterator',
+                'ReflectionException',
+                'RuntimeException',
+                'Serializable',
+                'SplFileInfo',
+                'Stringable',
+                'Throwable',
+                'Traversable',
+                'Throwable',
+            ],true);
+
+            AfrClassDependency::setSkipNamespaceInfo([
+                'PHPUnit\\',
+                'PharIo\\',
+                'SebastianBergmann\\',
+                'TheSeer\\',
+                'phpDocumentor\\',
+                'Webmozart\\',
+                'Symfony\\',
+                'Doctrine\\',
+                'Composer\\',
+                'Assert\\',
+                'Cose\\',
+                'DeepCopy\\',
+                'FG\\',
+                'PHPStan\\',
+                'ParagonIE\\',
+                'PhpParser\\',
+                'Prophecy\\',
+            ],true);
+
+            AfrMultiClassMapper::setAfrConfigWiredPaths($this);
+            $this->aClassInterfaceToConcrete =  AfrMultiClassMapper::getInterfaceToConcrete();
+            AfrMultiClassMapper::flush(); //clean memory
+            AfrClassDependency::flush(); //clean memory
+        }
+
+
+        return $this->aClassInterfaceToConcrete;
     }
 
     /**
      * @param string $s
      * @return string
      */
-    private function hashV(string $s): string
+    protected function hashV(string $s): string
     {
         return substr(base_convert(md5($s), 16, 32), 0, 5);
     }
@@ -128,12 +183,20 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
     }
 
     /**
+     * @return bool
+     */
+    public function getSilenceErrors(): bool
+    {
+        return $this->bSilenceErrors;
+    }
+
+    /**
      * @param array $aExtraPaths
      * @param array $aPaths
      * @return void
      * @throws AfrInterfaceToConcreteException
      */
-    private function applyExtraPrefix(array $aExtraPaths, array &$aPaths): void
+    protected function applyExtraPrefix(array $aExtraPaths, array &$aPaths): void
     {
         foreach ($aExtraPaths as $sPath) {
             $sPath = (string)$sPath;
@@ -146,7 +209,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
                     'Invalid paths for ' . __CLASS__ . '->' . __FUNCTION__ . '->' . print_r($aExtraPaths, true)
                 );
             }
-            $aPaths[self::ExtraPrefix][] = $sPath;
+            $aPaths[AfrMultiClassMapper::ExtraPrefix][] = $sPath;
         }
     }
 
@@ -155,10 +218,10 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
      * @return void
      * @throws AfrInterfaceToConcreteException
      */
-    private function applyVendorPrefix(array &$aPaths): void
+    protected function applyVendorPrefix(array &$aPaths): void
     {
-        $aPaths[self::VendorPrefix] = [AfrVendorPath::getVendorPath()];
-        if (empty($aPaths[self::VendorPrefix])) {
+        $aPaths[AfrMultiClassMapper::VendorPrefix] = [AfrVendorPath::getVendorPath()];
+        if (empty($aPaths[AfrMultiClassMapper::VendorPrefix])) {
             throw new AfrInterfaceToConcreteException(
                 'Composer vendor path not found ' . __CLASS__ . '->' . __FUNCTION__);
         }
@@ -168,16 +231,17 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
      * @param array $aPaths
      * @return void
      */
-    private function applyAutoloadPrefix(array &$aPaths): void
+    protected function applyAutoloadPrefix(array &$aPaths): void
     {
-        $aPaths[self::AutoloadPrefix] = [];
+        $aPaths[AfrMultiClassMapper::AutoloadPrefix] = [];
         foreach (AfrVendorPath::getComposerAutoloadX(false)['autoload'] as $sType => $mixed) {
             if ($sType === 'psr4' || $sType === 'psr0') {
                 foreach ($mixed as $aPsr) {
                     if (!is_array($aPsr)) {
                         continue;
                     }
-                    $aPaths[self::AutoloadPrefix] = array_merge($aPaths[self::AutoloadPrefix], $aPsr);
+                    $aPaths[AfrMultiClassMapper::AutoloadPrefix] =
+                        array_merge($aPaths[AfrMultiClassMapper::AutoloadPrefix], $aPsr);
                 }
             }
             //if ($sType === 'classmap') {}

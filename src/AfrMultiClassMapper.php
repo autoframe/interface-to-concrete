@@ -15,31 +15,64 @@ use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
  */
 class AfrMultiClassMapper
 {
+    public const VendorPrefix = '1Ve_'; //Vendor prefix
+    public const AutoloadPrefix = '2Al_'; //Auto-loaded composer
+    public const ExtraPrefix = '3Ex_'; //extra dirs
 
-    protected static AfrInterfaceToConcreteClass $oWiringPaths; // what to wire
+    protected static ?AfrInterfaceToConcreteInterface $oWiringPaths; // what to wire
     protected static string $sCacheDir; //local cache dir
 
     protected static bool $bRegenerateAllFlagButVendor = false; //force regenerate for caches
+    protected static bool $bSilenceErrors = false; // dev / production
     protected static array $aRegeneratedByBuildNewNsClassFilesMap = []; //regeneration report
 
     protected static bool $bClassTreeInfoCacheWriteDone = true; //infinite loop prevention
     protected static array $aNsClassMergedFromPathMap = []; //temp internal work cache
 
     /**
-     * @param AfrInterfaceToConcreteClass $oWiringPaths
+     * @param AfrInterfaceToConcreteInterface $oWiringPaths
      * @return void
      */
-    public static function setAfrConfigWiredPaths(AfrInterfaceToConcreteClass $oWiringPaths): void
+    public static function setAfrConfigWiredPaths(AfrInterfaceToConcreteInterface $oWiringPaths): void
     {
-        self::$oWiringPaths = $oWiringPaths;
-        self::$bRegenerateAllFlagButVendor = $oWiringPaths->getForceRegenerateAllButVendor();
+        //allow for multiple calls of AfrInterfaceToConcreteInterface->getClassInterfaceToConcrete
+        if (!isset(self::$oWiringPaths) || self::$oWiringPaths !== $oWiringPaths) {
+            self::$oWiringPaths = $oWiringPaths;
+            self::$bRegenerateAllFlagButVendor = $oWiringPaths->getForceRegenerateAllButVendor();
+            self::$bSilenceErrors = $oWiringPaths->getSilenceErrors();
+            self::$aNsClassMergedFromPathMap = self::$aRegeneratedByBuildNewNsClassFilesMap = [];
+        }
+    }
+
+    /**
+     * Cleanup
+     * @return void
+     */
+    public static function flush(): void
+    {
+        self::$oWiringPaths = null;
+        self::$sCacheDir = '';
+        self::$bRegenerateAllFlagButVendor = false;
+        self::$bClassTreeInfoCacheWriteDone = true;
         self::$aNsClassMergedFromPathMap = self::$aRegeneratedByBuildNewNsClassFilesMap = [];
     }
 
+    /**
+     * Get / Set parameter for silencing errors on production env
+     * @param bool|null $bSilenceErrors
+     * @return bool
+     */
+    public static function xetSilenceErrors(bool $bSilenceErrors = null): bool
+    {
+        if ($bSilenceErrors !== null) { //set
+            self::$bSilenceErrors = $bSilenceErrors;
+        }
+        return self::$bSilenceErrors; //get
+    }
 
     /**
      * Set or get force regenerating flag
-     * The regeneration can take few seconds depending on the number of php clases
+     * The regeneration can take few seconds depending on the number of php classes
      * @param bool|null $bRegenerateAll
      * @return bool
      */
@@ -60,53 +93,98 @@ class AfrMultiClassMapper
         self::getAllNsClassFilesMap();
         if (self::$aRegeneratedByBuildNewNsClassFilesMap || !is_file(self::getInterfaceToConcretePath())) { //we have new or modified php classes
             self::$bClassTreeInfoCacheWriteDone = false; //set start to regenerate flag
-            ob_start();
-            self::classInterfaceToConcreteWrite();
-            ob_end_clean();
+            if (self::$bSilenceErrors) {
+                ob_start();
+            }
+            $aWrittenToInterfaceToConcretePath = self::classInterfaceToConcreteWrite();
+            if (self::$bSilenceErrors) {
+                ob_end_clean();
+            }
+            return $aWrittenToInterfaceToConcretePath; //fast return without including a file from the drive
         }
         if (!is_file(self::getInterfaceToConcretePath())) {
-            throw new AfrInterfaceToConcreteException(__CLASS__ . ' is can not resolve ' . __FUNCTION__);
+            throw new AfrInterfaceToConcreteException(__CLASS__ . ' can not resolve ' . __FUNCTION__);
         }
-        //return [self::$aNsClassMergedFromPathMap, include(self::getInterfaceToConcretePath())];
         return (array)(include(self::getInterfaceToConcretePath()));
 
     }
 
     /**
+     * TRY TO STEP OVER MAX ONE FATAL ERROR!
+     * This might happen during a long composer update or when writing code on dev
+     * We mark the corrupted class as failed and continue with the mapping
      * @return void
+     * @throws AfrInterfaceToConcreteException
      */
-    public static function classInterfaceToConcreteWrite(): void
+    protected static function handleFatalFail(): void
     {
-        if (!self::$bClassTreeInfoCacheWriteDone) {
-            //TRY TO STEP OVER MAX ONE FATAL ERROR!
-            register_shutdown_function(function () {
-                if (AfrClassDependency::getDebugFatalError()) {
-                    echo ob_get_contents();
-                    ob_end_clean();
+        register_shutdown_function(function () {
+            if (AfrClassDependency::getDebugFatalError()) {
+
+                self::overWrite(self::getFailedClassPermanentSkipFile(), array_merge(
+                    self::getClassPermanentSkipClasses(),
+                    AfrClassDependency::getDebugFatalError()
+                ));
+                $bIsCli = http_response_code() === false;
+
+                //cli is nor recoverable so far
+                //TODO: try to spawn a cli worker having the same argv
+                if (!self::$bSilenceErrors || $bIsCli) {
+                    //echo ob_get_contents();
+                    //ob_end_clean();
                     echo PHP_EOL . 'Corrupted classes: ' .
                         implode('; ', array_keys(AfrClassDependency::getDebugFatalError())) .
                         PHP_EOL;
-                    self::overWrite(self::getFailedClassPermanentSkipFile(), array_merge(
-                        self::getClassPermanentSkipClasses(),
-                        AfrClassDependency::getDebugFatalError()
-                    ));
                 }
-                self::classInterfaceToConcreteWrite();
-            });
+                //try to recover the http initial request
+                if (self::$bSilenceErrors && !$bIsCli) { // not cli
+                    sleep(2); //server needs to recover in case of high load
+                    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+                        http_response_code(307);
+                        header('Location: ' . $_SERVER['REQUEST_URI']);
+                    } else {
+                        //TODO: using curl, try to resend the original request
+                    }
+                }
+            }
+            self::classInterfaceToConcreteWrite(); //try to continue
+        });
+    }
+
+    /**
+     * @return array
+     * @throws AfrInterfaceToConcreteException
+     */
+    public static function classInterfaceToConcreteWrite(): array
+    {
+        if (!self::$bClassTreeInfoCacheWriteDone) {
+            //TRY TO STEP OVER MAX ONE FATAL ERROR!
+            //This might happen during a long composer update or when writing code on dev
+            self::handleFatalFail();
 
             $aToSkip = self::getClassPermanentSkipClasses();
             foreach (self::$aNsClassMergedFromPathMap as $sNsCl => $sClassPath) {
                 if (isset($aToSkip[$sNsCl])) {
                     //Corrupted class! This will not be used in the "to concrete process"
+                    if (!self::$bSilenceErrors) {
+                        trigger_error('The class is marked as corrupted! Fix it and remove from ' .
+                            self::getFailedClassPermanentSkipFile(), E_USER_WARNING);
+                    }
                     continue;
                 }
                 AfrClassDependency::getClassInfo($sNsCl);
             }
-            self::overWrite(self::getInterfaceToConcretePath(), self::classInterfaceToConcreteMap());
-            self::$bClassTreeInfoCacheWriteDone = true;
-            self::$aRegeneratedByBuildNewNsClassFilesMap = [];
-
+            $aClassInterfaceToConcreteMap = self::classInterfaceToConcreteMap();
+            self::$bClassTreeInfoCacheWriteDone = true; //finally done
+            self::$aRegeneratedByBuildNewNsClassFilesMap = []; //cleanup generation flags
+            if (!self::overWrite(self::getInterfaceToConcretePath(), $aClassInterfaceToConcreteMap)) {
+                throw new AfrInterfaceToConcreteException(
+                    'File is not writable: ' . self::getInterfaceToConcretePath()
+                );
+            }
+            return $aClassInterfaceToConcreteMap;
         }
+        return [];
 
     }
 
@@ -164,9 +242,12 @@ class AfrMultiClassMapper
         $iCacheFileMtime = (int)filemtime($sNsClassFilesMapPath);
         //VENDOR
         if (AfrVendorPath::getVendorPath() === $sPath) {
-            $bComposerUpdated = AfrVendorPath::getComposerTs() > $iCacheFileMtime;
+            // wait at least 2 seconds in the case of a complex composer run
+            $iCTS = AfrVendorPath::getComposerTs();
+            $bComposerUpdated = $iCTS > $iCacheFileMtime && $iCTS + 2 < time();
             if ($bComposerUpdated) {
-                self::xetForceRegenerateAllButVendor(true); //propagate composer change to all
+                //propagate composer change to all because there might be new classes / interfaces in the packages!
+                self::xetForceRegenerateAllButVendor(true);
             }
             return $bComposerUpdated;
         }
@@ -188,7 +269,7 @@ class AfrMultiClassMapper
                     return true;
                 } else {
                     // no file changes since last cache build
-                    self::overWrite($sLastCheckFilePath, [gmdate('D, d M Y H:i:s').' GMT']);
+                    self::overWrite($sLastCheckFilePath, [gmdate('D, d M Y H:i:s') . ' GMT']);
                 }
             }
         }
@@ -198,7 +279,7 @@ class AfrMultiClassMapper
     /**
      * @return array
      */
-    private static function classInterfaceToConcreteMap(): array
+    protected static function classInterfaceToConcreteMap(): array
     {
         $aOut = [];
         foreach (AfrClassDependency::getDependencyInfo() as $sFQCN => $oEntity) {
@@ -229,14 +310,12 @@ class AfrMultiClassMapper
      * @param string $sPath
      * @return array
      */
-    private static function buildNewNsClassFilesMap(string $sPath): array
+    protected static function buildNewNsClassFilesMap(string $sPath): array
     {
-        $sAlPrefix = AfrInterfaceToConcreteClass::AutoloadPrefix;
-
         $sVendorOrAutoload = '';
         if (AfrVendorPath::getVendorPath() === $sPath) {
             $sVendorOrAutoload = 'vendor';
-        } elseif (substr($sPath, 0, strlen($sAlPrefix)) === $sAlPrefix) {
+        } elseif (substr($sPath, 0, strlen(self::AutoloadPrefix)) === self::AutoloadPrefix) {
             $sVendorOrAutoload = 'autoload';
         }
 
@@ -267,7 +346,7 @@ class AfrMultiClassMapper
 
         self::$aRegeneratedByBuildNewNsClassFilesMap[$sPath] =
             self::overWrite(self::getNsClassFilesMapPath($sPath), $aClasses);
-        self::overWrite(self::getNsClassFilesMapPathLastCheckTs($sPath), [gmdate('D, d M Y H:i:s').' GMT']);
+        self::overWrite(self::getNsClassFilesMapPathLastCheckTs($sPath), [gmdate('D, d M Y H:i:s') . ' GMT']);
 
         return $aClasses;
     }
@@ -295,7 +374,7 @@ class AfrMultiClassMapper
      * @param string $sPath
      * @return string
      */
-    private static function getNsClassFilesMapPath(string $sPath): string
+    protected static function getNsClassFilesMapPath(string $sPath): string
     {
         return self::xetCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath] . '_NsClassFilesMap.php';
     }
@@ -304,7 +383,7 @@ class AfrMultiClassMapper
      * @param string $sPath
      * @return string
      */
-    private static function getNsClassFilesMapPathLastCheckTs(string $sPath): string
+    protected static function getNsClassFilesMapPathLastCheckTs(string $sPath): string
     {
         return self::xetCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath] . '_CheckTs';
     }
@@ -312,7 +391,7 @@ class AfrMultiClassMapper
     /**
      * @return string
      */
-    private static function getInterfaceToConcretePath(): string
+    protected static function getInterfaceToConcretePath(): string
     {
         return self::xetCacheDir() . DIRECTORY_SEPARATOR .
             self::$oWiringPaths->getHash() .
@@ -322,7 +401,7 @@ class AfrMultiClassMapper
     /**
      * @return string
      */
-    private static function getFailedClassPermanentSkipFile(): string
+    protected static function getFailedClassPermanentSkipFile(): string
     {
         return self::xetCacheDir() . DIRECTORY_SEPARATOR .
             self::$oWiringPaths->getHash() .
@@ -332,7 +411,7 @@ class AfrMultiClassMapper
     /**
      * @return array
      */
-    private static function getClassPermanentSkipClasses(): array
+    protected static function getClassPermanentSkipClasses(): array
     {
         if (is_file(self::getFailedClassPermanentSkipFile())) {
             return (array)(include(self::getFailedClassPermanentSkipFile()));
@@ -345,7 +424,7 @@ class AfrMultiClassMapper
      * @param $sPath
      * @return string
      */
-    private static function getMapDirCachePath($sPath): string
+    protected static function getMapDirCachePath($sPath): string
     {
         return self::xetCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath];
     }
