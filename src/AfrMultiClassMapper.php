@@ -18,12 +18,26 @@ class AfrMultiClassMapper
     public const VendorPrefix = '1Ve_'; //Vendor prefix
     public const AutoloadPrefix = '2Al_'; //Auto-loaded composer
     public const ExtraPrefix = '3Ex_'; //extra dirs
+    public const ConcretePrefix = 'C_'; //class map
+
+    public const CacheExpireSeconds = '$i_AfrMultiClassMapper::iCacheExpireSeconds';
+    public const ForceRegenerateAllButVendor = '$b_AfrMultiClassMapper::bRegenerateAllFlagButVendor';
+    public const SilenceErrors = '$b_AfrMultiClassMapper::bSilenceErrors';
+    public const RegexExcludeFqcnsAndPaths = '$a_RegexExcludeFqcnsAndPaths';
+    public const CacheDir = '$s_AfrMultiClassMapper::sCacheDir';
+    public const MultiClassMapperFlush = '$b_AfrMultiClassMapper::flush';
+    public const ClassDependencyFlush = '$b_AfrClassDependency::flush';
+    public const ClassDependencyRestoreSkipped = '$b_AfrClassDependencyRestoreSkip';
+    public const ClassDependencySetSkipClassInfo = '$a_AfrClassDependency::setSkipClassInfo';
+    public const ClassDependencySetSkipNamespaceInfo = '$a_AfrClassDependency::setSkipNamespaceInfo';
+    public const DumpPhpFilePathAndMtime = '$b_AfrVendorPath::getVendorPath';
 
     protected static ?AfrInterfaceToConcreteInterface $oWiringPaths; // what to wire
     protected static string $sCacheDir; //local cache dir
 
-    protected static bool $bRegenerateAllFlagButVendor = false; //force regenerate for caches
-    protected static bool $bSilenceErrors = false; // dev / production
+    protected static bool $bForceRegenerateAllButVendor = false; //force regenerate for caches
+    protected static bool $bSilenceErrors = false;
+
     protected static array $aRegeneratedByBuildNewNsClassFilesMap = []; //regeneration report
 
     protected static bool $bClassTreeInfoCacheWriteDone = true; //infinite loop prevention
@@ -32,15 +46,29 @@ class AfrMultiClassMapper
     /**
      * @param AfrInterfaceToConcreteInterface $oWiringPaths
      * @return void
+     * @throws AfrInterfaceToConcreteException
      */
     public static function setAfrConfigWiredPaths(AfrInterfaceToConcreteInterface $oWiringPaths): void
     {
         //allow for multiple calls of AfrInterfaceToConcreteInterface->getClassInterfaceToConcrete
         if (!isset(self::$oWiringPaths) || self::$oWiringPaths !== $oWiringPaths) {
             self::$oWiringPaths = $oWiringPaths;
-            self::$bRegenerateAllFlagButVendor = $oWiringPaths->getForceRegenerateAllButVendor();
-            self::$bSilenceErrors = $oWiringPaths->getSilenceErrors();
+            self::$bForceRegenerateAllButVendor = $oWiringPaths->getEnvSettings()[self::ForceRegenerateAllButVendor];
+            self::$bSilenceErrors = $oWiringPaths->getEnvSettings()[self::SilenceErrors];
             self::$aNsClassMergedFromPathMap = self::$aRegeneratedByBuildNewNsClassFilesMap = [];
+
+            if(!empty($oWiringPaths->getEnvSettings()[self::CacheDir])){
+                self::$sCacheDir = realpath($oWiringPaths->getEnvSettings()[self::CacheDir]);
+            }
+            if (empty(self::$sCacheDir)) { //fallback
+                self::$sCacheDir = realpath(__DIR__) . DIRECTORY_SEPARATOR . 'cache';
+            }
+            if (!is_dir(self::$sCacheDir)) {
+                throw new AfrInterfaceToConcreteException('Dir not found ' . __CLASS__ . ': ' . self::$sCacheDir);
+            }
+            if (!is_file(self::$sCacheDir . DIRECTORY_SEPARATOR . '.gitignore')) {
+                file_put_contents(self::$sCacheDir . DIRECTORY_SEPARATOR . '.gitignore', "*.php\n*CheckTs\n");
+            }
         }
     }
 
@@ -51,37 +79,8 @@ class AfrMultiClassMapper
     public static function flush(): void
     {
         self::$oWiringPaths = null;
-        self::$sCacheDir = '';
-        self::$bRegenerateAllFlagButVendor = false;
         self::$bClassTreeInfoCacheWriteDone = true;
         self::$aNsClassMergedFromPathMap = self::$aRegeneratedByBuildNewNsClassFilesMap = [];
-    }
-
-    /**
-     * Get / Set parameter for silencing errors on production env
-     * @param bool|null $bSilenceErrors
-     * @return bool
-     */
-    public static function xetSilenceErrors(bool $bSilenceErrors = null): bool
-    {
-        if ($bSilenceErrors !== null) { //set
-            self::$bSilenceErrors = $bSilenceErrors;
-        }
-        return self::$bSilenceErrors; //get
-    }
-
-    /**
-     * Set or get force regenerating flag
-     * The regeneration can take few seconds depending on the number of php classes
-     * @param bool|null $bRegenerateAll
-     * @return bool
-     */
-    public static function xetForceRegenerateAllButVendor(bool $bRegenerateAll = null): bool
-    {
-        if ($bRegenerateAll !== null) { //set
-            self::$bRegenerateAllFlagButVendor = $bRegenerateAll;
-        }
-        return self::$bRegenerateAllFlagButVendor; //get
     }
 
     /**
@@ -197,7 +196,7 @@ class AfrMultiClassMapper
     public static function getSingleNsClassFilesMap(string $sPath): array
     {
         if (!isset(self::$oWiringPaths->getPaths()[$sPath])) {
-            throw new AfrInterfaceToConcreteException('First set the path using ' . __CLASS__ . '::setAfrConfigMapWiringPaths(AfrConfigMapWiringPaths)');
+            throw new AfrInterfaceToConcreteException('First set the path using ' . __CLASS__ . '::setAfrConfigWiredPaths(AfrInterfaceToConcreteInterface)');
         }
         if (self::checkForRegenerationFlag($sPath)) {
             return self::buildNewNsClassFilesMap($sPath);
@@ -210,10 +209,10 @@ class AfrMultiClassMapper
      * @return array
      * @throws AfrInterfaceToConcreteException
      */
-    protected static function getAllNsClassFilesMap(): array
+    public static function getAllNsClassFilesMap(): array
     {
         if (empty(self::$oWiringPaths)) {
-            throw new AfrInterfaceToConcreteException('Run first ' . __CLASS__ . '::setAfrConfigMapWiringPaths(AfrConfigMapWiringPaths)');
+            throw new AfrInterfaceToConcreteException('Run first ' . __CLASS__ . '::setAfrConfigWiredPaths(AfrInterfaceToConcreteInterface)');
         }
         if (!empty(self::$aNsClassMergedFromPathMap)) {
             return self::$aNsClassMergedFromPathMap;
@@ -230,6 +229,7 @@ class AfrMultiClassMapper
     /**
      * @param string $sPath
      * @return bool
+     * @throws AfrInterfaceToConcreteException
      */
     protected static function checkForRegenerationFlag(string $sPath): bool
     {
@@ -247,29 +247,31 @@ class AfrMultiClassMapper
             $bComposerUpdated = $iCTS > $iCacheFileMtime && $iCTS + 2 < time();
             if ($bComposerUpdated) {
                 //propagate composer change to all because there might be new classes / interfaces in the packages!
-                self::xetForceRegenerateAllButVendor(true);
+                self::$bForceRegenerateAllButVendor = true;
             }
             return $bComposerUpdated;
         }
 
         //OTHER PATHS
-        if (self::xetForceRegenerateAllButVendor()) {
+        if (self::$bForceRegenerateAllButVendor) {
             return true;
         }
 
-        if (time() > $iCacheFileMtime + self::$oWiringPaths->getCacheExpire()) {
+        $iCacheExpire = self::$oWiringPaths->getEnvSettings()[self::CacheExpireSeconds];
+        if (time() > $iCacheFileMtime + $iCacheExpire) {
+
             //old local cache file, so we rescan the system:
             $sLastCheckFilePath = self::getNsClassFilesMapPathLastCheckTs($sPath);
             if (!is_file($sLastCheckFilePath)) {
                 return true;
             }
-            if (time() > filemtime($sLastCheckFilePath) + self::$oWiringPaths->getCacheExpire()) {
+            if (time() > filemtime($sLastCheckFilePath) + $iCacheExpire) {
                 $iTsMaxFileSystem = self::getMaxDirTs($sPath);
                 if ($iTsMaxFileSystem > $iCacheFileMtime) {
                     return true;
                 } else {
                     // no file changes since last cache build
-                    self::overWrite($sLastCheckFilePath, [gmdate('D, d M Y H:i:s') . ' GMT']);
+                    self::overWriteTs($sLastCheckFilePath);
                 }
             }
         }
@@ -320,7 +322,7 @@ class AfrMultiClassMapper
         }
 
         if ($sVendorOrAutoload) {
-            $aClasses = AfrVendorPath::getComposerAutoloadX(false)[$sVendorOrAutoload];
+            $aClasses = AfrVendorPath::getComposerAutoloadX()[$sVendorOrAutoload];
             $aClasses = array_merge(
                 $aClasses['classmap'],
                 AfrVendorPath::createMapFromPsrX($aClasses['psr4']),
@@ -330,23 +332,24 @@ class AfrMultiClassMapper
             $aClasses = AfrVendorPath::createMap($sPath);
         }
 
-        if (AfrVendorPath::getVendorPath() === $sPath) {
-            foreach ($aClasses as &$sClassPath) {
-                //$sClassPath = '1|' . $sClassPath;
-                $sClassPath = 1;
+        $bDumpPhpFilePathAndMtime = self::$oWiringPaths->getEnvSettings()[self::DumpPhpFilePathAndMtime];
+        $iShort = AfrVendorPath::getVendorPath() === $sPath ? 1 : 2;
+        foreach ($aClasses as $sFQCN => &$sClassPath) {
+            if (self::excludeRegEx($sClassPath) || self::excludeRegEx($sFQCN)) {
+                unset($aClasses[$sFQCN]);
+                continue;
             }
-        } else {
-            foreach ($aClasses as &$sClassPath) {
-                //$sClassPath = ((string)@filemtime($sClassPath)) . '|' . $sClassPath;
-                $sClassPath = 2;
-            }
+            $sClassPath = $bDumpPhpFilePathAndMtime ?
+                ((string)@filemtime($sClassPath)) . '|' . $sClassPath :
+                $iShort;
         }
 
         arsort($aClasses); //sort in order to have the latest timestamp first
 
         self::$aRegeneratedByBuildNewNsClassFilesMap[$sPath] =
             self::overWrite(self::getNsClassFilesMapPath($sPath), $aClasses);
-        self::overWrite(self::getNsClassFilesMapPathLastCheckTs($sPath), [gmdate('D, d M Y H:i:s') . ' GMT']);
+
+        self::overWriteTs(self::getNsClassFilesMapPathLastCheckTs($sPath));
 
         return $aClasses;
     }
@@ -361,14 +364,33 @@ class AfrMultiClassMapper
      */
     protected static function overWrite(string $sPathTo, array $aData, int $iRetryMs = 3000, float $fDelta = 2): bool
     {
+        $sHeader = '<?php /* ' .gmdate('D, d M Y H:i:s') . ' GMT ->getEnvSettings: '.
+            str_replace('*/', '* /', print_r(self::$oWiringPaths->getEnvSettings(), true)) .
+            "*/ \n return ";
         return AfrOverWriteClass::getInstance()->overWriteFile(
             $sPathTo,
-            '<?php return ' . AfrArrExportArrayAsStringClass::getInstance()->exportPhpArrayAsString($aData),
+            $sHeader . AfrArrExportArrayAsStringClass::getInstance()->exportPhpArrayAsString($aData),
             $iRetryMs,
             $fDelta
         );
     }
 
+    /**
+     * @param string $sPathTo
+     * @param int $iRetryMs
+     * @param float $fDelta
+     * @return bool
+     */
+    protected static function overWriteTs(string $sPathTo, int $iRetryMs = 3000, float $fDelta = 2): bool
+    {
+        return AfrOverWriteClass::getInstance()->overWriteFile(
+            $sPathTo,
+            gmdate('D, d M Y H:i:s') . ' GMT' . PHP_EOL . 'getEnvSettings: ' .
+            print_r(self::$oWiringPaths->getEnvSettings(), true),
+            $iRetryMs,
+            $fDelta
+        );
+    }
 
     /**
      * @param string $sPath
@@ -376,7 +398,7 @@ class AfrMultiClassMapper
      */
     protected static function getNsClassFilesMapPath(string $sPath): string
     {
-        return self::xetCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath] . '_NsClassFilesMap.php';
+        return self::getCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath] . '_NsClassFilesMap.php';
     }
 
     /**
@@ -385,7 +407,20 @@ class AfrMultiClassMapper
      */
     protected static function getNsClassFilesMapPathLastCheckTs(string $sPath): string
     {
-        return self::xetCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath] . '_CheckTs';
+        return self::getCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath] . '_CheckTs';
+    }
+
+    protected static function getHash(): string
+    {
+        $aEnvSettings = self::$oWiringPaths->getEnvSettings();
+        return self::ConcretePrefix . self::$oWiringPaths->hashV(serialize(
+                [
+                    self::$oWiringPaths->getPaths(),
+                    $aEnvSettings[self::RegexExcludeFqcnsAndPaths],
+                    $aEnvSettings[self::DumpPhpFilePathAndMtime],
+                    AfrClassDependency::getSkipClassInfo(),
+                    AfrClassDependency::getSkipNamespaceInfo(),
+                ]));
     }
 
     /**
@@ -393,8 +428,8 @@ class AfrMultiClassMapper
      */
     protected static function getInterfaceToConcretePath(): string
     {
-        return self::xetCacheDir() . DIRECTORY_SEPARATOR .
-            self::$oWiringPaths->getHash() .
+        return self::getCacheDir() . DIRECTORY_SEPARATOR .
+            self::getHash() .
             '_ClassInterfaceToConcrete.php';
     }
 
@@ -403,13 +438,14 @@ class AfrMultiClassMapper
      */
     protected static function getFailedClassPermanentSkipFile(): string
     {
-        return self::xetCacheDir() . DIRECTORY_SEPARATOR .
-            self::$oWiringPaths->getHash() .
+        return self::getCacheDir() . DIRECTORY_SEPARATOR .
+            self::getHash() .
             '_FailedClassesPermanentlySkipped.php';
     }
 
     /**
      * @return array
+     * @throws AfrInterfaceToConcreteException
      */
     protected static function getClassPermanentSkipClasses(): array
     {
@@ -419,28 +455,40 @@ class AfrMultiClassMapper
         return [];
     }
 
-
     /**
      * @param $sPath
-     * @return string
+     * @return bool
      */
-    protected static function getMapDirCachePath($sPath): string
+    protected static function excludeRegEx($sPath): bool
     {
-        return self::xetCacheDir() . DIRECTORY_SEPARATOR . self::$oWiringPaths->getPaths()[$sPath];
+        foreach (self::$oWiringPaths->getEnvSettings()[self::RegexExcludeFqcnsAndPaths] as $sPattern) {
+            if (preg_match($sPattern, $sPath)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
      * @param string $sDirPath
      * @param int $iMaxTimestamp
      * @return int
+     * @throws AfrInterfaceToConcreteException
      */
     protected static function getMaxDirTs(string $sDirPath, int $iMaxTimestamp = 0): int
     {
         $aSubDirs = [];
         $sDirPath = strtr($sDirPath, DIRECTORY_SEPARATOR === '/' ? '\\' : '/', DIRECTORY_SEPARATOR);
-        if ($sDirPath === self::xetCacheDir()) { //ignore current cache dir
+        // Ignore current cache dir
+        // Under the vendor dir, this is not necessary because the vendor dir
+        // is versioned by the vendor/composer/install.json and not by the individual php's timestamps
+        if ($sDirPath === self::getCacheDir()) {
             return $iMaxTimestamp;
         }
+        if (self::excludeRegEx($sDirPath)) {
+            return $iMaxTimestamp;
+        }
+
         $dh = opendir($sDirPath);
         while (($sEntry = readdir($dh)) !== false) {
             if ($sEntry === '.' || $sEntry === '..') {
@@ -454,6 +502,9 @@ class AfrMultiClassMapper
             if ($sType === 'file') {
                 $sExt = strtolower(substr($sEntry, -4, 4));
                 if ($sExt === '.php' || $sExt === '.inc') {
+                    if (self::excludeRegEx($sTarget)) {
+                        continue;
+                    }
                     $iMaxTimestamp = max($iMaxTimestamp, (int)filemtime($sTarget));
                 }
             } elseif ($sType === 'dir') {
@@ -467,29 +518,11 @@ class AfrMultiClassMapper
         return $iMaxTimestamp;
     }
 
-
     /**
-     * @param string $sCacheDir
      * @return string
      */
-    protected static function xetCacheDir(string $sCacheDir = ''): string
+    public static function getCacheDir(): string
     {
-        $bSet = false;
-        if (strlen($sCacheDir)) { //set
-            $sCacheDir = (string)realpath($sCacheDir);
-            if (strlen($sCacheDir)) {
-                $bSet = true;
-                self::$sCacheDir = $sCacheDir;
-            }
-        }
-
-        if (empty(self::$sCacheDir)) { //fallback
-            $bSet = true;
-            self::$sCacheDir = realpath(__DIR__) . DIRECTORY_SEPARATOR . 'cache';
-        }
-        if ($bSet && !is_file(self::$sCacheDir . DIRECTORY_SEPARATOR . '.gitignore')) {
-            file_put_contents(self::$sCacheDir . DIRECTORY_SEPARATOR . '.gitignore', '*');
-        }
         return self::$sCacheDir; //get
     }
 

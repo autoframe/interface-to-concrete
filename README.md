@@ -18,3 +18,13 @@ Classes:
 - class AfrVendorPath 
   - will detect the vendor dir and read the psr4, psr0 and class-maps
 
+---
+
+	$oAfrConfigWiredPaths = new AfrInterfaceToConcreteClass(
+	  $sEnv, //'DEV'/ 'PRODUCTION'/ 'STAGING'/ 'DEBUG'
+	  $aEnvSettings [], //overwrite profile settings
+	  $aExtraPaths = [] //all compose paths are covered
+	  );
+	$oAfrConfigWiredPaths->getClassInterfaceToConcrete();
+	//OR STATIC CALL AFTER INSTANTIATING: 
+	AfrInterfaceToConcreteClass::$oInstance->getClassInterfaceToConcrete();

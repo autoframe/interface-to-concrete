@@ -1,9 +1,9 @@
 <?php
-declare(strict_types=1);
 
 namespace Autoframe\InterfaceToConcrete;
 
 
+use Autoframe\ClassDependency\AfrClassDependencyException;
 use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 
 /**
@@ -19,36 +19,27 @@ use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 interface AfrInterfaceToConcreteInterface
 {
     /**
-     * @param array $aExtraPaths
-     * @param int $iAutoWireCacheExpireSeconds
-     * @param bool $bForceRegenerateAllButVendor
-     * @throws AfrInterfaceToConcreteException
-     */
-    public function __construct(array $aExtraPaths = [], int $iAutoWireCacheExpireSeconds = 3600 * 24 * 365 * 2, bool $bForceRegenerateAllButVendor = false);
-
-    /**
      * @return array
      * @throws AfrInterfaceToConcreteException
+     * @throws AfrClassDependencyException
      */
     public function getClassInterfaceToConcrete(): array;
 
     /**
      * @return array
      */
-    public function getPaths(): array;
+    public function getEnvSettings(): array;
 
     /**
+     * @param string $s
      * @return string
      */
-    public function getHash(): string;
+    public function hashV(string $s): string;
 
     /**
-     * @return int
+     * @return array
      */
-    public function getCacheExpire(): int;
+    public function getPaths(): array;
 
-    /**
-     * @return bool
-     */
-    public function getForceRegenerateAllButVendor(): bool;
+
 }

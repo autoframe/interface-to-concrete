@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Autoframe\InterfaceToConcrete;
 
 use Autoframe\ClassDependency\AfrClassDependencyException;
-use Autoframe\Components\Exception\AfrException;
 use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 use Autoframe\ClassDependency\AfrClassDependency;
 
@@ -19,46 +18,42 @@ use function serialize;
  * Copyright BSD-3-Clause / Nistor Alexadru Marius / Auroframe SRL Romania / https://github.com/autoframe
  * This will make a configuration object that contains the paths to be wired:
  *
- * $oAfrConfigWiredPaths = new AfrConfigWiredPaths(['src','vendor']);
- * AfrMultiClassMapper::setAfrConfigWiredPaths($oAfrConfigWiredPaths);
- * AfrMultiClassMapper::xetRegenerateAll(true/false);
- * register_shutdown_function(function(){ print_r(AfrClassDependency::getDependencyInfo());});
- * $aMaps = AfrMultiClassMapper::getInterfaceToConcrete();
+ * $oAfrConfigWiredPaths = new AfrInterfaceToConcreteClass(
+ *  $sEnv, //'DEV'/ 'PRODUCTION'/ 'STAGING'/ 'DEBUG'
+ * $aEnvSettings [], //overwrite profile settings
+ * $aExtraPaths = [] //all compose paths are covered
+ * );
+ * $oAfrConfigWiredPaths->getClassInterfaceToConcrete();
+ *
+ * STATIC CALL AFTER INSTANTIATING:  AfrInterfaceToConcreteClass::$oInstance->getClassInterfaceToConcrete();
+ *
  */
 class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
 {
     /** @var array Paths to cache */
     protected array $aPaths = [];
-    /** @var string Path hash */
-    protected string $sHash;
-    /** @var int The amount of seconds between the checks for Auto-loaded files outside the vendor dir */
-    protected int $iAutoWireCacheExpireSeconds;
-
-    protected bool $bForceRegenerateAllButVendor;
-    protected bool $bSilenceErrors;
     protected array $aClassInterfaceToConcrete;
-
+    protected array $aEnvSettings;
+    public static AfrInterfaceToConcreteInterface $oInstance;
 
     /**
+     * @param string $sEnv
+     * @param array $aEnvSettings
      * @param array $aExtraPaths
-     * @param int $iAutoWireCacheExpireSeconds
-     * @param bool $bForceRegenerateAllButVendor
-     * @param bool $bSilenceErrors
-     * @throws AfrException
      * @throws AfrInterfaceToConcreteException
      */
     public function __construct(
-        array $aExtraPaths = [],
-        int   $iAutoWireCacheExpireSeconds = 3600 * 24 * 365 * 2,
-        bool  $bForceRegenerateAllButVendor = false,
-        bool  $bSilenceErrors = false
+        string $sEnv,
+        array  $aEnvSettings = [],
+        array  $aExtraPaths = []
     )
     {
-        $this->iAutoWireCacheExpireSeconds = max(60, abs($iAutoWireCacheExpireSeconds));
-        $this->bForceRegenerateAllButVendor = $bForceRegenerateAllButVendor;
-        $this->bSilenceErrors = $bSilenceErrors;
-
-        $aPaths = [AfrMultiClassMapper::VendorPrefix => [], AfrMultiClassMapper::AutoloadPrefix => [], AfrMultiClassMapper::ExtraPrefix => [],];
+        $this->setEnvSettings($sEnv, $aEnvSettings);
+        $aPaths = [
+            AfrMultiClassMapper::VendorPrefix => [],
+            AfrMultiClassMapper::AutoloadPrefix => [],
+            AfrMultiClassMapper::ExtraPrefix => [],
+        ];
         $this->applyExtraPrefix($aExtraPaths, $aPaths);
         $this->applyVendorPrefix($aPaths);
         $this->applyAutoloadPrefix($aPaths);
@@ -68,15 +63,14 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
                 if (isset($this->aPaths[$sPath])) {
                     continue;
                 }
-                $this->aPaths[$sPath] = $sPrefix . $this->hashV($sPath);
+                $this->aPaths[$sPath] = $sPrefix . $this->hashV(serialize([
+                        $sPath,
+                        $this->aEnvSettings[AfrMultiClassMapper::DumpPhpFilePathAndMtime],
+                        $this->aEnvSettings[AfrMultiClassMapper::RegexExcludeFqcnsAndPaths],
+                    ]));
             }
         }
-        $this->sHash = 'C_' . $this->hashV(serialize(array_merge(
-                $this->aPaths,
-                AfrClassDependency::setSkipClassInfo([], true),
-                AfrClassDependency::setSkipNamespaceInfo([], true)
-            )));
-
+        self::$oInstance = $this;
     }
 
     /**
@@ -86,9 +80,86 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
      */
     public function getClassInterfaceToConcrete(): array
     {
-        if(!isset($this->aClassInterfaceToConcrete)){
+        if (!isset($this->aClassInterfaceToConcrete)) {
+            $aSaveSkipClassInfo = $aSaveSkipNamespaceInfo = [];
+            if ($this->aEnvSettings[AfrMultiClassMapper::ClassDependencyRestoreSkipped]) {
+                $aSaveSkipClassInfo = AfrClassDependency::getSkipClassInfo();
+                $aSaveSkipNamespaceInfo = AfrClassDependency::getSkipNamespaceInfo();
+            }
+            AfrClassDependency::flush();
+            AfrClassDependency::setSkipClassInfo($this->aEnvSettings[AfrMultiClassMapper::ClassDependencySetSkipClassInfo]);
+            AfrClassDependency::setSkipNamespaceInfo($this->aEnvSettings[AfrMultiClassMapper::ClassDependencySetSkipNamespaceInfo]);
 
-            AfrClassDependency::setSkipClassInfo([
+            AfrMultiClassMapper::setAfrConfigWiredPaths($this);
+            $this->aClassInterfaceToConcrete = AfrMultiClassMapper::getInterfaceToConcrete();
+
+            if ($this->aEnvSettings[AfrMultiClassMapper::MultiClassMapperFlush]) {
+                AfrMultiClassMapper::flush(); //clean memory
+            }
+            if ($this->aEnvSettings[AfrMultiClassMapper::ClassDependencyFlush]) {
+                AfrClassDependency::flush(); //clean memory
+            }
+            if ($this->aEnvSettings[AfrMultiClassMapper::ClassDependencyRestoreSkipped]) {
+                AfrClassDependency::setSkipClassInfo($aSaveSkipClassInfo);
+                AfrClassDependency::setSkipNamespaceInfo($aSaveSkipNamespaceInfo);
+            }
+
+        }
+
+
+        return $this->aClassInterfaceToConcrete;
+    }
+
+
+    /**
+     * @param string $sEnv
+     * @param array $aOverwrite
+     * @throws AfrInterfaceToConcreteException
+     */
+    protected function setEnvSettings(string $sEnv, array $aOverwrite = [])
+    {
+        $aEnv = ['DEV', 'PRODUCTION', 'STAGING', 'DEBUG'];
+        $sEnv = strtoupper($sEnv);
+        if (!in_array($sEnv, $aEnv)) {
+            throw new AfrInterfaceToConcreteException(
+                __FUNCTION__ . ' for ' . get_class($this) . ' must be: ' . implode(' / ', $aEnv)
+            );
+        }
+
+        $aEnvSettings = [
+            //time between changes checks. if something changed, then the cache is recalculated
+            AfrMultiClassMapper::CacheExpireSeconds => 3600 * 24 * 365 * 2,
+
+            //all php sources except the vendor because there we check vendor/composer/install.json timestamp
+            AfrMultiClassMapper::ForceRegenerateAllButVendor => false,
+
+            //ob_start is used and redirects / cli handling
+            AfrMultiClassMapper::SilenceErrors => false,
+
+            //exclude folder and file paths and namespaces in all checks
+            //eg. ['@src.{1,}Exception@','@PHPUnit.{1,}Telemetry@']
+            AfrMultiClassMapper::RegexExcludeFqcnsAndPaths => [],
+
+            // full path: /server/cacheDir
+            // overwrite here or auto set by AfrMultiClassMapper::getCacheDir()
+            // realpath(__DIR__) . DIRECTORY_SEPARATOR . 'cache';
+            AfrMultiClassMapper::CacheDir => realpath(__DIR__) . DIRECTORY_SEPARATOR . 'cache',
+
+            // Clean memory after job or keep AfrMultiClassMapper::$aNsClassMergedFromPathMap
+            // and access the raw data using AfrMultiClassMapper::getAllNsClassFilesMap()
+            AfrMultiClassMapper::MultiClassMapperFlush => true,
+
+            //flush after usage and clear memory or kep all for debug
+            AfrMultiClassMapper::ClassDependencyFlush => true,
+
+            //restore AfrMultiClassMapper skip info after flush
+            AfrMultiClassMapper::ClassDependencyRestoreSkipped => true,
+
+            //this will consume more space inside cache dir and memory to process
+            AfrMultiClassMapper::DumpPhpFilePathAndMtime => false,
+
+            //pointless in my application type, but it depends on what you do
+            AfrMultiClassMapper::ClassDependencySetSkipClassInfo => [
                 'ArrayAccess',
                 'BadFunctionCallException',
                 'BadMethodCallException',
@@ -109,9 +180,8 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
                 'Throwable',
                 'Traversable',
                 'Throwable',
-            ],true);
-
-            AfrClassDependency::setSkipNamespaceInfo([
+            ],
+            AfrMultiClassMapper::ClassDependencySetSkipNamespaceInfo => [
                 'PHPUnit\\',
                 'PharIo\\',
                 'SebastianBergmann\\',
@@ -129,25 +199,80 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
                 'ParagonIE\\',
                 'PhpParser\\',
                 'Prophecy\\',
-            ],true);
+            ],
+        ];
 
-            AfrMultiClassMapper::setAfrConfigWiredPaths($this);
-            $this->aClassInterfaceToConcrete =  AfrMultiClassMapper::getInterfaceToConcrete();
-            AfrMultiClassMapper::flush(); //clean memory
-            AfrClassDependency::flush(); //clean memory
+        if ($sEnv === 'DEV') {
+            $aEnvSettings = array_merge($aEnvSettings, [
+                AfrMultiClassMapper::CacheExpireSeconds => 60,
+            ]);
+        }elseif ($sEnv === 'DEBUG') {
+            $aEnvSettings = array_merge($aEnvSettings, [
+                AfrMultiClassMapper::CacheExpireSeconds => 15,
+                AfrMultiClassMapper::ForceRegenerateAllButVendor => true,
+                AfrMultiClassMapper::SilenceErrors => false,
+                AfrMultiClassMapper::RegexExcludeFqcnsAndPaths => [],
+                AfrMultiClassMapper::MultiClassMapperFlush => false,
+                AfrMultiClassMapper::ClassDependencyFlush => false,
+                AfrMultiClassMapper::ClassDependencyRestoreSkipped => false,
+                AfrMultiClassMapper::DumpPhpFilePathAndMtime => true,
+                AfrMultiClassMapper::ClassDependencySetSkipClassInfo => [],
+                AfrMultiClassMapper::ClassDependencySetSkipNamespaceInfo => [],
+            ]);
+        } else { // PRODUCTION
+            $aEnvSettings = array_merge($aEnvSettings, [
+                AfrMultiClassMapper::SilenceErrors => true,
+            ]);
         }
+        foreach ($aEnvSettings as $sKey => $mValue) {
+            if (isset($aOverwrite[$sKey])) {
+                $sType = substr($sKey, 0, 2);
+                $sErr = 'EnvSettings['.$sKey.'] was given as '.gettype($aOverwrite[$sKey]).' in stead of ';
+                if ($sType === '$i') {
+                    if(!is_int($aOverwrite[$sKey])){
+                        throw new AfrInterfaceToConcreteException($sErr.' integer');
+                    }
+                    $aEnvSettings[$sKey] = max(15, abs($aOverwrite[$sKey]));
+                } elseif ($sType === '$b') {
+                    if(!is_bool($aOverwrite[$sKey])){
+                        throw new AfrInterfaceToConcreteException($sErr.' boolean');
+                    }
+                    $aEnvSettings[$sKey] = $aOverwrite[$sKey];
+                } elseif ($sType === '$a') {
+                    if(!is_array($aOverwrite[$sKey])){
+                        throw new AfrInterfaceToConcreteException($sErr.' array');
+                    }
+                    $aEnvSettings[$sKey] = $aOverwrite[$sKey];
+                }
+                elseif ($sType === '$s') {
+                    if(!is_string($aOverwrite[$sKey])){
+                        throw new AfrInterfaceToConcreteException($sErr.' string');
+                    }
+                    $aEnvSettings[$sKey] = $aOverwrite[$sKey];
+                }
+                else{
+                    throw new AfrInterfaceToConcreteException('EnvSettings['.$sKey.'] unknown format');
+                }
+            }
+        }
+        $this->aEnvSettings = $aEnvSettings;
+    }
 
-
-        return $this->aClassInterfaceToConcrete;
+    /**
+     * @return array
+     */
+    public function getEnvSettings(): array
+    {
+        return $this->aEnvSettings;
     }
 
     /**
      * @param string $s
      * @return string
      */
-    protected function hashV(string $s): string
+    public function hashV(string $s): string
     {
-        return substr(base_convert(md5($s), 16, 32), 0, 5);
+        return substr(base_convert(md5($s), 16, 32), 0, 6);
     }
 
     /**
@@ -158,37 +283,6 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
         return $this->aPaths;
     }
 
-    /**
-     * @return string
-     */
-    public function getHash(): string
-    {
-        return $this->sHash;
-    }
-
-    /**
-     * @return int
-     */
-    public function getCacheExpire(): int
-    {
-        return $this->iAutoWireCacheExpireSeconds;
-    }
-
-    /**
-     * @return bool
-     */
-    public function getForceRegenerateAllButVendor(): bool
-    {
-        return $this->bForceRegenerateAllButVendor;
-    }
-
-    /**
-     * @return bool
-     */
-    public function getSilenceErrors(): bool
-    {
-        return $this->bSilenceErrors;
-    }
 
     /**
      * @param array $aExtraPaths
@@ -234,7 +328,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
     protected function applyAutoloadPrefix(array &$aPaths): void
     {
         $aPaths[AfrMultiClassMapper::AutoloadPrefix] = [];
-        foreach (AfrVendorPath::getComposerAutoloadX(false)['autoload'] as $sType => $mixed) {
+        foreach (AfrVendorPath::getComposerAutoloadX()['autoload'] as $sType => $mixed) {
             if ($sType === 'psr4' || $sType === 'psr0') {
                 foreach ($mixed as $aPsr) {
                     if (!is_array($aPsr)) {
@@ -244,7 +338,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
                         array_merge($aPaths[AfrMultiClassMapper::AutoloadPrefix], $aPsr);
                 }
             }
-            //if ($sType === 'classmap') {}
+            //if ($sType === 'classmap') {} // classmap covered under AfrMultiClassMapper::VendorPrefix
         }
     }
 }
