@@ -205,7 +205,7 @@ class AfrToConcreteStrategiesClass implements AfrToConcreteStrategiesInterface
      */
     public function extendStrategyStrategyContextNamespaceFilterArr(
         string $sNamespace,
-        string $sContext = '',
+        string $sContext = ''
     ): AfrToConcreteStrategiesInterface
     {
         $this->aContextNamespaceFilterArr[$sContext][$sNamespace] = true;
