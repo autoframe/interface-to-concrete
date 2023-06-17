@@ -554,7 +554,7 @@ class AfrToConcreteStrategiesClass implements AfrToConcreteStrategiesInterface
              */
             self::StrategyProjectComposerPsrNamespaces => function (
                 AfrToConcreteStrategiesInterface $oStrategiesInterface
-                , array $aMap
+                , array                          $aMap
             ): array {
                 $aComposerConfig = AfrVendorPath::getComposerJson();
                 $aAutoload = [];
@@ -584,11 +584,13 @@ class AfrToConcreteStrategiesClass implements AfrToConcreteStrategiesInterface
              */
             self::StrategyFirstFoundWithWarning => function (AfrToConcreteStrategiesInterface $oStrategiesInterface, array $aMap): array {
                 foreach ($aMap as $implementingClass => $bInstantiable) {
-                    unset($aMap[$implementingClass]);
-                    trigger_error(
-                        $oStrategiesInterface->getNotConcreteFQCN() . ' was auto-resolved as ' . $implementingClass .
-                        '; Other options are: ' . implode(', ', array_keys($aMap))
-                    );
+                    if (!class_exists('PHPUnit\Framework\TestCase', false)) {
+                        unset($aMap[$implementingClass]);
+                        trigger_error(
+                            $oStrategiesInterface->getNotConcreteFQCN() . ' was auto-resolved as ' . $implementingClass .
+                            '; Other options are: ' . implode(', ', array_keys($aMap))
+                        );
+                    }
                     return [$implementingClass => $bInstantiable];
                 }
                 return [];
