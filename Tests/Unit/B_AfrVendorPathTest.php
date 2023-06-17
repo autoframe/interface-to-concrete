@@ -6,7 +6,7 @@ namespace Unit;
 use PHPUnit\Framework\TestCase;
 use Autoframe\InterfaceToConcrete\AfrVendorPath;
 
-class AfrVendorPathTest extends TestCase
+class B_AfrVendorPathTest extends TestCase
 {
     public static function getVendorPathProvider(): array
     {
@@ -21,7 +21,7 @@ class AfrVendorPathTest extends TestCase
     public function getVendorPathTest($sNot): void
     {
         echo __CLASS__ . '->' . __FUNCTION__ . PHP_EOL;
-        $this->assertNotEquals($sNot, AfrVendorPath::getVendorPath());
+        $this->assertNotSame($sNot, AfrVendorPath::getVendorPath());
     }
 
 
@@ -32,7 +32,7 @@ class AfrVendorPathTest extends TestCase
     public function getBaseDirPathTest($sNot): void
     {
         echo __CLASS__ . '->' . __FUNCTION__ . PHP_EOL;
-        $this->assertNotEquals($sNot, AfrVendorPath::getBaseDirPath());
+        $this->assertNotSame($sNot, AfrVendorPath::getBaseDirPath());
     }
 
 

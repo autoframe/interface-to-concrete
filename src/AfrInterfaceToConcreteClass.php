@@ -34,7 +34,8 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
     protected array $aPaths = [];
     protected array $aClassInterfaceToConcrete;
     protected array $aEnvSettings;
-    public static AfrInterfaceToConcreteInterface $oInstance;
+    public static AfrInterfaceToConcreteInterface $oLatestInstance;
+    protected ?AfrToConcreteStrategiesInterface $oAfrToConcreteStrategies;
 
     /**
      * @param string $sEnv
@@ -70,7 +71,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
                     ]));
             }
         }
-        self::$oInstance = $this;
+        self::$oLatestInstance = $this;
     }
 
     /**
@@ -108,6 +109,17 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
 
 
         return $this->aClassInterfaceToConcrete;
+    }
+
+    /**
+     * @return AfrInterfaceToConcreteInterface|null
+     */
+    public static function getLatestInstance(): ?AfrInterfaceToConcreteInterface
+    {
+        if (!empty(self::$oLatestInstance)) {
+            return self::$oLatestInstance;
+        }
+        return null;
     }
 
 
@@ -206,7 +218,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
             $aEnvSettings = array_merge($aEnvSettings, [
                 AfrMultiClassMapper::CacheExpireSeconds => 60,
             ]);
-        }elseif ($sEnv === 'DEBUG') {
+        } elseif ($sEnv === 'DEBUG') {
             $aEnvSettings = array_merge($aEnvSettings, [
                 AfrMultiClassMapper::CacheExpireSeconds => 15,
                 AfrMultiClassMapper::ForceRegenerateAllButVendor => true,
@@ -227,31 +239,29 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
         foreach ($aEnvSettings as $sKey => $mValue) {
             if (isset($aOverwrite[$sKey])) {
                 $sType = substr($sKey, 0, 2);
-                $sErr = 'EnvSettings['.$sKey.'] was given as '.gettype($aOverwrite[$sKey]).' in stead of ';
+                $sErr = 'EnvSettings[' . $sKey . '] was given as ' . gettype($aOverwrite[$sKey]) . ' in stead of ';
                 if ($sType === '$i') {
-                    if(!is_int($aOverwrite[$sKey])){
-                        throw new AfrInterfaceToConcreteException($sErr.' integer');
+                    if (!is_int($aOverwrite[$sKey])) {
+                        throw new AfrInterfaceToConcreteException($sErr . ' integer');
                     }
                     $aEnvSettings[$sKey] = max(15, abs($aOverwrite[$sKey]));
                 } elseif ($sType === '$b') {
-                    if(!is_bool($aOverwrite[$sKey])){
-                        throw new AfrInterfaceToConcreteException($sErr.' boolean');
+                    if (!is_bool($aOverwrite[$sKey])) {
+                        throw new AfrInterfaceToConcreteException($sErr . ' boolean');
                     }
                     $aEnvSettings[$sKey] = $aOverwrite[$sKey];
                 } elseif ($sType === '$a') {
-                    if(!is_array($aOverwrite[$sKey])){
-                        throw new AfrInterfaceToConcreteException($sErr.' array');
+                    if (!is_array($aOverwrite[$sKey])) {
+                        throw new AfrInterfaceToConcreteException($sErr . ' array');
                     }
                     $aEnvSettings[$sKey] = $aOverwrite[$sKey];
-                }
-                elseif ($sType === '$s') {
-                    if(!is_string($aOverwrite[$sKey])){
-                        throw new AfrInterfaceToConcreteException($sErr.' string');
+                } elseif ($sType === '$s') {
+                    if (!is_string($aOverwrite[$sKey])) {
+                        throw new AfrInterfaceToConcreteException($sErr . ' string');
                     }
                     $aEnvSettings[$sKey] = $aOverwrite[$sKey];
-                }
-                else{
-                    throw new AfrInterfaceToConcreteException('EnvSettings['.$sKey.'] unknown format');
+                } else {
+                    throw new AfrInterfaceToConcreteException('EnvSettings[' . $sKey . '] unknown format');
                 }
             }
         }
@@ -341,4 +351,77 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
             //if ($sType === 'classmap') {} // classmap covered under AfrMultiClassMapper::VendorPrefix
         }
     }
+
+    /**
+     * @return AfrToConcreteStrategiesInterface
+     */
+    public function getAfrToConcreteStrategies(): AfrToConcreteStrategiesInterface
+    {
+        //use default concrete
+        if (empty($this->oAfrToConcreteStrategies)) {
+            $this->oAfrToConcreteStrategies = AfrToConcreteStrategiesClass::getLatestInstance();
+        }
+        return $this->oAfrToConcreteStrategies;
+    }
+
+    /**
+     * @param AfrToConcreteStrategiesInterface $oAfrToConcreteStrategies
+     * @return AfrToConcreteStrategiesInterface
+     */
+    public function setAfrToConcreteStrategies(
+        AfrToConcreteStrategiesInterface $oAfrToConcreteStrategies
+    ): AfrToConcreteStrategiesInterface
+    {
+        return $this->oAfrToConcreteStrategies = $oAfrToConcreteStrategies;
+    }
+
+    /**
+     * Returns: 1|FQCN for instantiable; 2|FQCN for singleton; 0|notConcreteFQCN for fail
+     * @param string $sNotConcreteFQCN
+     * @param string|null $sTemporaryContextOverwrite
+     * @param string|null $sTemporaryPriorityRuleOverwrite
+     * @return string
+     * @throws AfrClassDependencyException
+     * @throws AfrInterfaceToConcreteException
+     */
+    public function resolve(
+        string $sNotConcreteFQCN,
+        string $sTemporaryContextOverwrite = null,
+        string $sTemporaryPriorityRuleOverwrite = null
+    ): string
+    {
+        if ($sTemporaryContextOverwrite !== null) {
+            $sBackupContext = $this->getAfrToConcreteStrategies()->getContext();
+            $this->getAfrToConcreteStrategies()->setContext($sTemporaryContextOverwrite);
+        }
+
+        if ($sTemporaryPriorityRuleOverwrite !== null) {
+            $sBackupPriorityRule = $this->getAfrToConcreteStrategies()->getPriorityRule();
+            $this->getAfrToConcreteStrategies()->setPriorityRule($sTemporaryPriorityRuleOverwrite);
+        }
+
+        if (!isset($this->aClassInterfaceToConcrete)) {
+            $this->getClassInterfaceToConcrete(); //init map
+        }
+        $aMappings =
+            !empty($this->aClassInterfaceToConcrete[$sNotConcreteFQCN]) &&
+            is_array($this->aClassInterfaceToConcrete[$sNotConcreteFQCN]) ?
+                $this->aClassInterfaceToConcrete[$sNotConcreteFQCN] : [];
+
+        $sResoled =
+            $this->getAfrToConcreteStrategies()->
+            setContext($sTemporaryContextOverwrite)->
+            resolveMap($aMappings, $sNotConcreteFQCN);
+
+        //restore
+        if ($sTemporaryContextOverwrite !== null) {
+            $this->getAfrToConcreteStrategies()->setContext($sBackupContext);
+        }
+        if ($sTemporaryPriorityRuleOverwrite !== null) {
+            $this->getAfrToConcreteStrategies()->setPriorityRule($sBackupPriorityRule);
+        }
+        return $sResoled;
+    }
+
+
 }

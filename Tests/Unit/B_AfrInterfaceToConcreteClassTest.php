@@ -11,7 +11,7 @@ use Autoframe\InterfaceToConcrete\AfrInterfaceToConcreteClass;
 use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 
 
-class AfrInterfaceToConcreteClassTest extends TestCase
+class B_AfrInterfaceToConcreteClassTest extends TestCase
 {
     public static function getVendorPathProvider(): array
     {

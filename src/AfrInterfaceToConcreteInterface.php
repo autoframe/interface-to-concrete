@@ -26,6 +26,11 @@ interface AfrInterfaceToConcreteInterface
     public function getClassInterfaceToConcrete(): array;
 
     /**
+     * @return AfrInterfaceToConcreteInterface|null
+     */
+    public static function getLatestInstance(): ?AfrInterfaceToConcreteInterface;
+
+    /**
      * @return array
      */
     public function getEnvSettings(): array;
@@ -41,5 +46,30 @@ interface AfrInterfaceToConcreteInterface
      */
     public function getPaths(): array;
 
+    /**
+     * @return AfrToConcreteStrategiesInterface
+     */
+    public function getAfrToConcreteStrategies(): AfrToConcreteStrategiesInterface;
+
+    /**
+     * @param AfrToConcreteStrategiesInterface $oAfrToConcreteStrategies
+     * @return AfrToConcreteStrategiesInterface
+     */
+    public function setAfrToConcreteStrategies(AfrToConcreteStrategiesInterface $oAfrToConcreteStrategies): AfrToConcreteStrategiesInterface;
+
+    /**
+     * Returns: 1|FQCN for instantiable; 2|FQCN for singleton; 0|notConcreteFQCN for fail
+     * @param string $sNotConcreteFQCN
+     * @param string|null $sTemporaryContextOverwrite
+     * @param string|null $sTemporaryPriorityRuleOverwrite
+     * @return string
+     * @throws AfrClassDependencyException
+     * @throws AfrInterfaceToConcreteException
+     */
+    public function resolve(
+        string $sNotConcreteFQCN,
+        string $sTemporaryContextOverwrite = null,
+        string $sTemporaryPriorityRuleOverwrite = null
+    ): string;
 
 }
