@@ -8,6 +8,7 @@ use Autoframe\Components\Exception\AfrException;
 use Autoframe\InterfaceToConcrete\AfrMultiClassMapper;
 use PHPUnit\Framework\TestCase;
 use Autoframe\InterfaceToConcrete\AfrInterfaceToConcreteClass;
+use Autoframe\InterfaceToConcrete\AfrInterfaceToConcreteInterface;
 use Autoframe\InterfaceToConcrete\Exception\AfrInterfaceToConcreteException;
 
 
@@ -124,6 +125,12 @@ class B_AfrInterfaceToConcreteClassTest extends TestCase
         AfrClassDependency::clearDependencyInfo();
         AfrClassDependency::setSkipClassInfo([]);
         AfrClassDependency::setSkipNamespaceInfo([]);
+
+        $this->assertSame(
+            '1|' . AfrInterfaceToConcreteClass::class,
+            $obj->resolve(AfrInterfaceToConcreteInterface::class, false)
+        );
+
     }
 
 

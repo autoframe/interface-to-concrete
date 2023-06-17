@@ -378,6 +378,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
     /**
      * Returns: 1|FQCN for instantiable; 2|FQCN for singleton; 0|notConcreteFQCN for fail
      * @param string $sNotConcreteFQCN
+     * @param bool $bUseCache
      * @param string|null $sTemporaryContextOverwrite
      * @param string|null $sTemporaryPriorityRuleOverwrite
      * @return string
@@ -386,6 +387,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
      */
     public function resolve(
         string $sNotConcreteFQCN,
+        bool   $bUseCache = true,
         string $sTemporaryContextOverwrite = null,
         string $sTemporaryPriorityRuleOverwrite = null
     ): string
@@ -410,8 +412,7 @@ class AfrInterfaceToConcreteClass implements AfrInterfaceToConcreteInterface
 
         $sResoled =
             $this->getAfrToConcreteStrategies()->
-            setContext($sTemporaryContextOverwrite)->
-            resolveMap($aMappings, $sNotConcreteFQCN);
+            resolveMap($aMappings, $sNotConcreteFQCN, $bUseCache);
 
         //restore
         if ($sTemporaryContextOverwrite !== null) {
