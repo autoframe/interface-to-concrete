@@ -21,7 +21,7 @@ Classes:
 ---
 
 # AfrInterfaceToConcreteClass
-
+```php
 	$oAfrConfigWiredPaths = new AfrInterfaceToConcreteClass(
 	  $sEnv, //'DEV'/ 'PRODUCTION'/ 'STAGING'/ 'DEBUG'
 	  $aEnvSettings [], //overwrite profile settings
@@ -30,11 +30,12 @@ Classes:
 	$oAfrConfigWiredPaths->getClassInterfaceToConcrete();
 	//OR STATIC CALL AFTER INSTANTIATING: 
 	AfrInterfaceToConcreteClass::$oInstance->getClassInterfaceToConcrete();
+```
 
 ---
 
 # AfrToConcreteStrategiesClass
-
+```php
     $sRuleName = 'CustomRule';
     $obj = \Autoframe\InterfaceToConcrete\AfrToConcreteStrategiesClass::getLatestInstance();
     //add a custom strategy
@@ -84,3 +85,4 @@ Classes:
     $sResplvedClass = '1|ns1\\concreteInstantiable'; // new ns1\\concreteInstantiable(...);
     $sResplvedClass = '2|ns2\\concreteSingleton'; //singleton::getInstance();
     $sResplvedClass = '0|ns\\notConcrete'; //fail
+```
